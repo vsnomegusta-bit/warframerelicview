@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Warframe - GitHub Auto-Sync</title>
+    <style>
+        /* (O CSS permanece o mesmo das versões anteriores) */
+        :root { --gold: #c19b4b; --bg: #0d1117; --card: #161b22; --text: #c9d1d9; --red: #f85149; --green: #238636; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        .admin-bar { background: #21262d; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--gold); text-align: center; }
+        .admin-bar input[type="password"] { padding: 10px; border-radius: 4px; border: 1px solid #30363d; background: #0d1117; color: white; width: 200px; }
+        .btn { border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
+        .btn-gold { background: var(--gold); color: black; }
+        .btn-green { background: var(--green); color: white; }
+        .btn-danger { background: var(--red); color: white; font-size: 0.7em; padding: 4px 8px; }
+        .editor-tool { display: none; }
+        .unlocked .editor-tool { display: inline-block; }
+        .unlocked #login-area { display: none; }
+        .relic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+        .relic-card { background: var(--card); border-radius: 10px; padding: 15px; border: 1px solid #30363d; }
+        .relic-header { border-bottom: 1px solid #333; margin-bottom: 10px; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;}
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #21262d; }
+        .price-tag { color: #3fb950; font-weight: bold; cursor: pointer; padding: 5px; border-radius: 4px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-box input, .search-box select { padding: 12px; border-radius: 6px; border: 1px solid #30363d; background: var(--card); color: white; flex: 1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="text-align: center; color: var(--gold);">Warframe Relic Database</h1>
+    <p id="status-msg" style="text-align: center; font-size: 0.8em; color: #888;">Carregando dados do repositório...</p>
+
+    <div class="admin-bar">
+        <div id="login-area">
+            <input type="password" id="passInput" placeholder="Senha: 1234">
+            <button class="btn btn-gold" onclick="autenticar()">DESBLOQUEAR EDIÇÃO</button>
+        </div>
+        <div id="tool-area" class="editor-tool">
+            <button class="btn btn-green" onclick="addReliquia()">+ Nova Relíquia</button>
+            <button class="btn" style="background:#444; color:white;" onclick="exportarJSON()">💾 Baixar JSON Atualizado</button>
+        </div>
+    </div>
+
+    <div class="search-box">
+        <input type="text" id="txtBusca" placeholder="Pesquisar..." onkeyup="filtrar()">
+        <select id="selEra" onchange="filtrar()">
+            <option value="">Todas as Eras</option>
+            <option value="Lith">Lith</option>
+            <option value="Meso">Meso</option>
+            <option value="Neo">Neo</option>
+            <option value="Axi">Axi</option>
+        </select>
+    </div>
+
+    <div id="listaReliquias" class="relic-grid"></div>
+</div>
+
+<script>
+    const SENHA_CORRETA = "1234";
+    let bancoDados = [];
+
+    // 1. FUNÇÃO QUE BUSCA O JSON NO GITHUB
+    async function carregarDadosIniciais() {
+        const status = document.getElementById('status-msg');
+        try {
+            // Tenta carregar o arquivo reliquias.json que está na mesma pasta
+            const resposta = await fetch('reliquias.json');
+            if (!resposta.ok) throw new Error('Arquivo não encontrado');
+            
+            bancoDados = await resposta.json();
+            status.innerText = "✅ Dados carregados do repositório.";
+            renderizar();
+        } catch (erro) {
+            console.log("Aviso: reliquias.json não encontrado no servidor. Usando cache local.");
+            // Se falhar (ex: rodando offline), tenta o LocalStorage
+            const localData = localStorage.getItem('warframe_db_final');
+            if (localData) {
+                bancoDados = JSON.parse(localData);
+                status.innerText = "💡 Carregado do cache do navegador.";
+            } else {
+                status.innerText = "❌ Nenhum dado encontrado. Adicione relíquias manualmente.";
+            }
+            renderizar();
+        }
+    }
+
+    function autenticar() {
+        if (document.getElementById('passInput').value === SENHA_CORRETA) {
+            document.body.classList.add('unlocked');
+        } else { alert("Senha Incorreta!"); }
+    }
+
+    function renderizar() {
+        const grid = document.getElementById('listaReliquias');
+        grid.innerHTML = '';
+        bancoDados.forEach((reliquia, rIdx) => {
+            const card = document.createElement('div');
+            card.className = 'relic-card';
+            card.setAttribute('data-era', reliquia.era);
+            card.setAttribute('data-search', (reliquia.nome + " " + (reliquia.itens ? reliquia.itens.map(i => i.n).join(" ") : "")).toLowerCase());
+
+            let html = `
+                <div class="relic-header">
+                    <div><b style="color:var(--gold)">${reliquia.nome}</b><br><small>${reliquia.era}</small></div>
+                    <button class="btn-danger editor-tool" onclick="removerReliquia(${rIdx})">Apagar</button>
+                </div>`;
+
+            if(reliquia.itens) {
+                reliquia.itens.forEach((item, iIdx) => {
+                    html += `
+                        <div class="item-row">
+                            <span>${item.n}</span>
+                            <div>
+                                <span class="price-tag" onclick="editarPreco(${rIdx}, ${iIdx})">${item.p} PL</span>
+                                <button class="btn-danger editor-tool" onclick="removerItem(${rIdx}, ${iIdx})" style="margin-left:5px">X</button>
+                            </div>
+                        </div>`;
+                });
+            }
+            html += `<button class="btn btn-green editor-tool" style="width:100%; margin-top:10px" onclick="adicionarItem(${rIdx})">+ Item</button>`;
+            card.innerHTML = html;
+            grid.appendChild(card);
+        });
+    }
+
+    function salvar() {
+        localStorage.setItem('warframe_db_final', JSON.stringify(bancoDados));
+        renderizar();
+    }
+
+    function exportarJSON() {
+        const blob = new Blob([JSON.stringify(bancoDados, null, 2)], {type : 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'reliquias.json';
+        a.click();
+    }
+
+    // CRUD e Filtros (Mesma lógica anterior)
+    function addReliquia() {
+        const nome = prompt("Nome da Relíquia:");
+        const era = prompt("Era:");
+        if (nome && era) { bancoDados.push({ era, nome, itens: [] }); salvar(); }
+    }
+    function removerReliquia(idx) { if (confirm("Apagar?")) { bancoDados.splice(idx, 1); salvar(); } }
+    function adicionarItem(rIdx) {
+        const nome = prompt("Item:");
+        const preco = prompt("Preço:", "0");
+        if (nome) { 
+            if(!bancoDados[rIdx].itens) bancoDados[rIdx].itens = [];
+            bancoDados[rIdx].itens.push({ n: nome, p: parseInt(preco) }); 
+            salvar(); 
+        }
+    }
+    function removerItem(rIdx, iIdx) { bancoDados[rIdx].itens.splice(iIdx, 1); salvar(); }
+    function editarPreco(rIdx, iIdx) {
+        if (!document.body.classList.contains('unlocked')) return;
+        const n = prompt("Novo Preço:", bancoDados[rIdx].itens[iIdx].p);
+        if (n !== null) { bancoDados[rIdx].itens[iIdx].p = parseInt(n); salvar(); }
+    }
+    function filtrar() {
+        const q = document.getElementById('txtBusca').value.toLowerCase();
+        const e = document.getElementById('selEra').value;
+        document.querySelectorAll('.relic-card').forEach(c => {
+            const m = c.getAttribute('data-search').includes(q) && (e === "" || c.getAttribute('data-era') === e);
+            c.style.display = m ? "block" : "none";
+        });
+    }
+
+    // INICIA CARREGANDO DO GITHUB
+    carregarDadosIniciais();
+</script>
+</body>
+</html>
