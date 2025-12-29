@@ -2,32 +2,33 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Warframe - Database Manager Fix</title>
+    <title>Warframe Relic - Editor JSON</title>
     <style>
-        :root { --gold: #c19b4b; --bg: #0d1117; --card: #161b22; --text: #c9d1d9; --red: #f85149; --green: #238636; }
+        :root { --gold: #c19b4b; --bg: #0d1117; --card: #161b22; --text: #c9d1d9; --red: #f85149; --green: #238636; --blue: #1f6feb; }
         body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 20px; }
         .container { max-width: 1000px; margin: auto; }
         
+        /* Barra de Ferramentas */
         .admin-bar { background: #21262d; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--gold); text-align: center; }
         .admin-bar input { padding: 10px; border-radius: 4px; border: 1px solid #30363d; background: #0d1117; color: white; width: 200px; }
         
-        .btn { border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
+        .btn { border: none; padding: 10px 18px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; margin: 5px; }
         .btn-gold { background: var(--gold); color: black; }
         .btn-green { background: var(--green); color: white; }
+        .btn-blue { background: var(--blue); color: white; border: 1px solid rgba(255,255,255,0.1); }
         .btn-danger { background: var(--red); color: white; font-size: 0.7em; padding: 4px 8px; }
 
-        /* Esconde as ferramentas por padrão */
         .editor-tool { display: none; }
         .unlocked .editor-tool { display: inline-block; }
         .unlocked #login-area { display: none; }
 
+        /* Lista de Itens */
         .relic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
         .relic-card { background: var(--card); border-radius: 10px; padding: 15px; border: 1px solid #30363d; }
         .relic-header { border-bottom: 1px solid #333; margin-bottom: 10px; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;}
         
         .item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #21262d; }
-        .price-tag { color: #3fb950; font-weight: bold; cursor: pointer; padding: 5px; border-radius: 4px; }
-        .price-tag:hover { background: rgba(63, 185, 80, 0.1); }
+        .price-tag { color: #3fb950; font-weight: bold; cursor: pointer; padding: 4px; border-radius: 4px; }
         
         .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
         .search-box input, .search-box select { padding: 12px; border-radius: 6px; border: 1px solid #30363d; background: var(--card); color: white; flex: 1; }
@@ -36,18 +37,20 @@
 <body>
 
 <div class="container">
-    <h1 style="text-align: center; color: var(--gold);">Gerenciador de Relíquias</h1>
+    <h1 style="text-align: center; color: var(--gold);">Gerenciador & Exportador JSON</h1>
 
     <div class="admin-bar">
         <div id="login-area">
-            <input type="password" id="passInput" placeholder="Senha: 1234">
-            <button class="btn btn-gold" onclick="autenticar()">DESBLOQUEAR EDIÇÃO</button>
+            <input type="password" id="passInput" placeholder="Senha do Editor">
+            <button class="btn btn-gold" onclick="autenticar()">DESBLOQUEAR EDITOR</button>
         </div>
         <div id="tool-area" class="editor-tool">
-            <p style="color: var(--green); margin-bottom: 15px;">🔓 MODO EDITOR ATIVO</p>
-            <button class="btn btn-green" onclick="addReliquia()">+ Nova Relíquia</button>
-            <button class="btn" style="background:#444; color:white;" onclick="exportar()">📤 Copiar Dados p/ Amigo</button>
-            <button class="btn" style="background:#444; color:white;" onclick="importar()">📥 Colar Dados do Amigo</button>
+            <p style="color: var(--green); margin-bottom: 10px; font-weight: bold;">🔓 MODO DE EDIÇÃO ATIVO</p>
+            <button class="btn btn-green" onclick="addReliquia()">+ Relíquia</button>
+            
+            <button class="btn btn-blue" onclick="baixarJSON()" title="Baixa o arquivo para hospedar ou backup">💾 SALVAR E GERAR JSON</button>
+            
+            <button class="btn" style="background:#444; color:white;" onclick="importar()">📥 Importar Dados</button>
         </div>
     </div>
 
@@ -66,25 +69,19 @@
 </div>
 
 <script>
-    // SENHA PADRÃO: 1234
     const SENHA_CORRETA = "1234";
-
-    // Dados Iniciais
     let bancoDados = [
-        { era: "Axi", nome: "Axi G11", itens: [{ n: "Grendel Prime BP", p: 15 }] }
+        { era: "Axi", nome: "Exemplo", itens: [{ n: "Parte Prime", p: 10 }] }
     ];
 
-    // Carregar do Navegador se existir
-    const localData = localStorage.getItem('warframe_db_v2');
+    // Carregar do LocalStorage inicial
+    const localData = localStorage.getItem('warframe_db_v3');
     if (localData) bancoDados = JSON.parse(localData);
 
     function autenticar() {
-        const senha = document.getElementById('passInput').value;
-        if (senha === SENHA_CORRETA) {
+        if (document.getElementById('passInput').value === SENHA_CORRETA) {
             document.body.classList.add('unlocked');
-        } else {
-            alert("Senha Incorreta!");
-        }
+        } else { alert("Senha Incorreta!"); }
     }
 
     function renderizar() {
@@ -99,13 +96,9 @@
 
             let html = `
                 <div class="relic-header">
-                    <div>
-                        <b style="color:var(--gold)">${reliquia.nome}</b><br>
-                        <small>${reliquia.era}</small>
-                    </div>
+                    <div><b>${reliquia.nome}</b> <small>(${reliquia.era})</small></div>
                     <button class="btn-danger editor-tool" onclick="removerReliquia(${rIdx})">Apagar</button>
-                </div>
-            `;
+                </div>`;
 
             reliquia.itens.forEach((item, iIdx) => {
                 html += `
@@ -113,82 +106,90 @@
                         <span>${item.n}</span>
                         <div>
                             <span class="price-tag" onclick="editarPreco(${rIdx}, ${iIdx})">${item.p} PL</span>
-                            <button class="btn-danger editor-tool" onclick="removerItem(${rIdx}, ${iIdx})" style="margin-left:5px">X</button>
+                            <button class="btn-danger editor-tool" onclick="removerItem(${rIdx}, ${iIdx})" style="margin-left:5px">x</button>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
 
-            html += `<button class="btn btn-green editor-tool" style="width:100%; margin-top:10px" onclick="adicionarItem(${rIdx})">+ Item</button>`;
-            
+            html += `<button class="btn btn-green editor-tool" style="width:100%; margin-top:10px; font-size:0.8em" onclick="adicionarItem(${rIdx})">+ Adicionar Item</button>`;
             card.innerHTML = html;
             grid.appendChild(card);
         });
     }
 
-    // FUNÇÕES DE EDIÇÃO
+    // Funções de Edição
     function addReliquia() {
-        const nome = prompt("Nome da Relíquia (ex: Neo P22):");
-        const era = prompt("Era (Lith, Meso, Neo ou Axi):");
+        const nome = prompt("Nome da Relíquia:");
+        const era = prompt("Era (Lith/Meso/Neo/Axi):");
         if (nome && era) {
             bancoDados.push({ era, nome, itens: [] });
-            salvar();
+            salvarLocal();
         }
     }
 
     function removerReliquia(idx) {
-        if (confirm("Apagar toda a relíquia?")) {
+        if (confirm("Remover esta relíquia?")) {
             bancoDados.splice(idx, 1);
-            salvar();
+            salvarLocal();
         }
     }
 
     function adicionarItem(rIdx) {
-        const nome = prompt("Nome do Item:");
-        const preco = prompt("Preço inicial:", "0");
-        if (nome) {
-            bancoDados[rIdx].itens.push({ n: nome, p: parseInt(preco) });
-            salvar();
+        const n = prompt("Nome do Item:");
+        const p = prompt("Preço:", "0");
+        if (n) {
+            bancoDados[rIdx].itens.push({ n, p: parseInt(p) || 0 });
+            salvarLocal();
         }
     }
 
     function removerItem(rIdx, iIdx) {
         bancoDados[rIdx].itens.splice(iIdx, 1);
-        salvar();
+        salvarLocal();
     }
 
     function editarPreco(rIdx, iIdx) {
-        if (!document.body.classList.contains('unlocked')) {
-            alert("Desbloqueie o editor com a senha primeiro!");
-            return;
-        }
-        const novo = prompt("Novo Preço para " + bancoDados[rIdx].itens[iIdx].n, bancoDados[rIdx].itens[iIdx].p);
+        if (!document.body.classList.contains('unlocked')) return;
+        const novo = prompt("Novo preço:", bancoDados[rIdx].itens[iIdx].p);
         if (novo !== null) {
-            bancoDados[rIdx].itens[iIdx].p = parseInt(novo);
-            salvar();
+            bancoDados[rIdx].itens[iIdx].p = parseInt(novo) || 0;
+            salvarLocal();
         }
     }
 
-    function salvar() {
-        localStorage.setItem('warframe_db_v2', JSON.stringify(bancoDados));
+    // SALVAMENTO NO NAVEGADOR (Local)
+    function salvarLocal() {
+        localStorage.setItem('warframe_db_v3', JSON.stringify(bancoDados));
         renderizar();
     }
 
-    // SYNC
-    function exportar() {
-        const code = btoa(JSON.stringify(bancoDados));
-        navigator.clipboard.writeText(code);
-        alert("Código de sincronização copiado! Envie para seu amigo.");
+    // GERAÇÃO DO ARQUIVO JSON (Para exportar/hospedar)
+    function baixarJSON() {
+        if (confirm("Isso irá gerar o arquivo 'reliquias.json' com todas as suas alterações atuais. Prosseguir?")) {
+            const dataStr = JSON.stringify(bancoDados, null, 4);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "reliquias.json";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            alert("Arquivo gerado com sucesso! Você pode usá-lo para atualizar seu código ou mandar para amigos.");
+        }
     }
 
     function importar() {
-        const code = prompt("Cole o código do seu amigo aqui:");
+        const code = prompt("Cole o conteúdo do seu arquivo JSON ou código de sync aqui:");
         if (code) {
             try {
-                bancoDados = JSON.parse(atob(code));
-                salvar();
-                alert("Dados sincronizados!");
-            } catch(e) { alert("Código inválido!"); }
+                // Tenta ler tanto Base64 quanto JSON puro
+                const decoded = code.startsWith('[') ? JSON.parse(code) : JSON.parse(atob(code));
+                bancoDados = decoded;
+                salvarLocal();
+                alert("Dados importados!");
+            } catch(e) { alert("Erro ao importar dados. Verifique o formato."); }
         }
     }
 
